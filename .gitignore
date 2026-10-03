@@ -1,0 +1,11 @@
+work/
+dist/
+device-logs/
+__pycache__/
+*.pyc
+*.EXE
+*.exe
+*.iso
+*.bin
+*.cue
+*.chd
