@@ -1,74 +1,142 @@
-# Bergraser — implementation task
+# Bergraser — fast playable MVP on RG40XX-H
 
-## Goal
-Use the existing repository `mtoensing/bergraser` and bring Ridge Racer 1 (PS1, Japan SLPS-00001) to native aarch64 PortMaster on a real Anbernic RG40XX-H. Start from the static recompilation in kazuyette/rr-decomp, not a claim of a finished C decompilation.
+## Mission
+Use the existing repository `mtoensing/bergraser`, branch `prototype/rg40xx`.
+Get the existing Ridge Racer 1 PS1 native recompilation running on the real
+Anbernic as quickly as practical. Execute the build/deploy/test loop; do not
+stop at a plan, broad research or a successful headless compile.
 
-## Fixed inputs
-- Owner/repository: mtoensing/bergraser
-- Branch: prototype/rg40xx
-- Target: RG40XX-H; H700; aarch64; 1 GB RAM; 640x480; KNULLI
-- Previous Sternenfuchs test endpoint: root@192.168.178.76:22. Verify availability before deployment; do not assume it is current.
-- Persistent storage: /userdata
-- Port directory: /userdata/roms/ports/bergraser
-- Enable SSH in System Settings -> Services -> SSH. Obtain credentials from the user/device settings; never commit credentials.
+First deliverable: a minimal PortMaster prototype that boots, reaches the
+menu, accepts the built-in controls, plays audio and starts a playable race.
+Measure actual gameplay immediately. Full-game polish and 60 FPS come later.
 
-## Sources and known state (research 2026-10-03)
+## Fixed test device — same as Sternenfuchs
+- Anbernic RG40XX H; H700; 4x Cortex-A53 up to ~1.5 GHz; Mali-G31
+- aarch64; 1 GB RAM; 640x480; KNULLI
+- SSH: `root@192.168.178.76:22`; the device will be reachable for testing
+- KNULLI default root password: `linux`
+- If it fails: System Settings -> Security -> Root password
+- SSH enabled at: System Settings -> Services -> SSH
+- Persistent storage: `/userdata`
+- PortMaster control file: `/userdata/system/.local/share/PortMaster/control.txt`
+- Launcher: `/userdata/roms/ports/Bergraser.sh`
+- Game directory: `/userdata/roms/ports/bergraser/`
+- Logs: game folder `log.txt`; fetched logs under ignored `device-logs/`
+
+Reuse working SSH keys and the Sternenfuchs build/deploy conventions.
+Do not store actual passwords or private keys in git. The password above is
+the documented firmware default, not a request to embed credentials in scripts.
+If SSH is temporarily unavailable, continue independent build work and report
+the exact connection failure; never claim a device test ran.
+
+## Chosen starting point
 - https://github.com/kazuyette/rr-decomp
-- https://github.com/kazuyette/rr-decomp/blob/main/tools/m0/README.md
-- https://github.com/kazuyette/rr-pc-port
-- https://portmaster.games/porting.html
-- https://portmaster.games/packaging.html
-- Reference task: https://github.com/mtoensing/sternenfuchs/blob/main/AGENT_TASK.md
+- Runtime: `tools/m0/`
+- Build instructions: https://github.com/kazuyette/rr-decomp/blob/main/tools/m0/README.md
+- Reference workflow: https://github.com/mtoensing/sternenfuchs
+- PortMaster: https://portmaster.games/porting.html
+- Packaging: https://portmaster.games/packaging.html
 
-rr-decomp reports 219/949 functions and 5.6% of instructions recovered as real C. Its separate static recompilation translates MIPS into C and models required PS1 hardware. The runtime is documented as playable on Linux/Windows with SDL2, input and audio. It uses a software rasterizer; hardware rendering remains unfinished. ARM64 and this handheld are unverified.
+Use rr-decomp's existing playable static recompilation. Do not wait for the
+matching decompilation to finish and do not start a new decompilation.
+Pin the actual upstream SHA in `scripts/versions.sh` and record it in SOURCES.md.
+Read only upstream instructions, license and code relevant to the immediate build.
 
-rr-pc-port is a separate portable-C playable race slice, not proof of complete game coverage. Its README has an older decomp progress number; use rr-decomp's current progress tool instead. Prefer rr-decomp for original game behavior unless observed blockers justify switching.
+The existing runtime is documented as playable on Linux/Windows with SDL2,
+controller input, music and effects. Its PS1 rasterizer runs on the CPU;
+SDL/GLES presentation does not mean polygon drawing is GPU accelerated.
+ARM64/device speed has not been verified here.
 
-## Execute
-1. Inspect upstream AGENTS.md if present, LICENSE, tools/m0/build.py, runtime README and actual code. Resolve license/distribution requirements before importing source or publishing binaries; do not assume an OSI license.
-2. Pin the selected upstream commit in scripts/versions.sh. Record exact SHA and source URL in SOURCES.md. Do not invent a SHA or update it during bring-up.
-3. Add AGENTS.md with repository-owner commit attribution, README.md with truthful prototype status, SOURCES.md, .gitignore and reproducible bootstrap scripts.
-4. Keep game assets local. Support the user's own SLPS-00001 disc, PSX.EXE, data track and optional CUE/audio tracks. Validate inputs with actionable errors.
-5. Implement scripts/build-arm64.sh and .github/workflows/build-arm64.yml. Prefer a native ARM64 runner with a target-compatible userspace (Ubuntu 22.04 container as the Sternenfuchs starting point). Verify glibc and library compatibility against the actual firmware.
-6. Adapt tools/m0/build.py for aarch64 compiler selection, SDL2 discovery and reproducible generation. Audit x86 flags, alignment, pointer/integer assumptions, endianness and generated-code compilation. Do not use x86 emulation.
-7. Use target-provided patched SDL2 for video, audio and controllers. Test KMS/DRM or the firmware's supported SDL2 backend without a desktop. Distinguish CPU rasterization from GPU-backed framebuffer presentation.
-8. Make paths relocatable. Audit generated absolute disc/audio paths; resolve user data at runtime. No developer-machine paths or gameplay duration timeout in the final launcher.
-9. Add a PortMaster launcher with control.txt integration, working directory, log path, clean exit, and controller mappings only if native SDL gamepad input fails.
-10. Add scripts/setup-ssh.sh, deploy-rg40xx.sh, smoke-rg40xx.sh and fetch-rg40xx-log.sh. Make them real executable implementations before referring to them as supplied. Deploy only the port's own files and preserve user data.
-11. Make the ARM64 workflow pass, download its artifact, deploy, run smoke tests, fetch logs and fix the smallest actual build/runtime blocker.
-12. Launch from KNULLI's Ports menu. Verify boot, title/menu, controller, audio, full race and clean exit.
-13. Profile representative races on device: separate game/recompiled code, GTE, CPU rasterizer, SPU/audio and presentation costs. Record frame times, peak memory, audio underruns and wall-clock versus race-clock time.
-14. Optimize only measured bottlenecks. If CPU rasterization is insufficient, evaluate a faithful GLES renderer while preserving PS1 ordering, affine texture behavior, CLUTs, masking and transparency. Preserve a reference software path for comparison.
-15. Package a sideload artifact with only the launcher and game folder at its root. Prepare PortMaster submission metadata only after real gameplay works and distribution requirements are resolved.
+Alternative reference: https://github.com/kazuyette/rr-pc-port
+This is a separate incomplete race slice. Do not switch to it silently or
+replace original behavior with approximations to make the MVP look successful.
 
-## Priorities and acceptance
-1. Boot
-2. Menu
-3. Controller
-4. Audio (music and effects)
-5. One complete playable race
-6. Sustained original game speed, initially the documented 30 FPS race target
+## Fast execution order
+1. Clone/use bergraser and create `prototype/rg40xx` if absent. Inspect any
+   existing work and preserve it. Pin upstream and read applicable AGENTS.md.
+2. Check SSH and target architecture, libc and SDL2 availability. In parallel
+   with device-independent work, locate the user's supported game files in
+   the port directory or existing game storage. Do not download game media.
+3. Use the user's Japanese PS1 release SLPS-00001: PSX.EXE and data track;
+   CUE/audio tracks for music. Validate inputs. If absent, report the precise
+   missing files, then continue toolchain and asset-free preparation.
+4. Build the full native aarch64 runtime in an authorized environment with
+   private access to those inputs. Prefer an existing ARM64 builder or a
+   compatible cross-toolchain; reuse Ubuntu 22.04 userspace as a starting
+   point. Public CI is not a prerequisite to the first device run.
+5. Make only the build changes actually needed: compiler selection, x86-only
+   flags, SDL2 discovery, target libc compatibility and generated-code issues.
+   Start with an optimized build, not Debug. Do not redesign the runtime.
+6. Use KNULLI/PortMaster's patched SDL2 and its working Mali/GLES backend.
+   Preserve upstream CPU rasterization initially. Present the framebuffer
+   through the existing SDL renderer/texture route; do not force desktop GL.
+   Prefer native SDL gamepad input; no keyboard emulation unless input fails.
+7. Add the smallest real launcher, logging and deploy/smoke/log-fetch scripts.
+   Follow Sternenfuchs and PortMaster control.txt/get_controls/exit conventions.
+   Check disc/audio paths: initial fixed paths inside the port directory are
+   acceptable for this MVP, but no build-machine paths. Remove any upstream
+   diagnostic run-duration limit from the interactive launcher.
+8. Deploy only the port's own files. Never use deletion that removes user
+   media, saves, settings, Sternenfuchs or other ports.
+9. Run on the real display. Pause EmulationStation only for the SSH smoke
+   test and restore it afterward; reuse Sternenfuchs' approach. Fetch logs.
+10. Fix the smallest observed build/startup/input/audio blocker and repeat.
+    Do not stop merely because one attempt failed.
+11. Verify title/menu, built-in controller, sound and a real race. Use available
+    scripted input for reproducibility and screenshots where useful. Clearly
+    separate automatic checks from user-only/manual checks.
+12. Run at least 60 seconds of representative racing, preferably a complete
+    race. Report measured FPS/frame times, audio behavior, CPU use and game
+    timer versus wall-clock. Do not benchmark a title screen as gameplay.
+13. Commit the reproducible changes and document exact launch/build commands,
+    required game files and observed limitations. Provide a local sideload
+    package when distribution terms permit. Only then add useful asset-free
+    CI and packaging polish; neither should delay the first working race.
 
-Correct gameplay speed is mandatory. Compare at least 60 seconds of wall-clock and race-clock time. Never reach a frame-rate target by accelerating physics/timers/audio or by slowing simulation, skipping frames or dropping visual correctness.
+## MVP acceptance and performance gate
+Priorities: boot -> menu -> controller -> audio -> playable race -> original speed.
+Display at 640x480, 4:3, preserving original internal resolution and visuals.
 
-Treat 60 FPS presentation/gameplay as a separate, researched enhancement. Increasing HZ alone is not a verified 60 FPS fix. Preserve original internal rendering initially and scale to the 640x480 display with correct 4:3 aspect ratio.
+The initial timing target is the runtime's documented original 30 FPS racing
+behavior; verify its timing on hardware rather than assuming HZ=30 is correct.
+A playable but slow race is a useful prototype result, clearly labelled
+PERFORMANCE FAIL; it is not a finished successful port.
 
-## Constraints
-- No Vulkan, WestonPack, replacement drivers or unrelated refactoring as the initial approach.
-- Do not bundle/replace libc, libstdc++, SDL2 or firmware graphics libraries without a proven specific blocker and documented resolution.
-- Do not commit disc images, PSX.EXE, extracted assets, assembly/disassembly generated from the game, generated game.c, save states or builds containing embedded copyrighted game content.
-- Ensure CI does not require uploading game data or generated game code to public services. An asset-free CI pass is not proof that the full game builds; document which validation ran locally with private inputs.
-- Never report a headless build as a working playable port or skipped asset tests as gameplay validation.
-- No PortMaster PR before hardware gameplay and packaging work.
-- Never claim code, scripts, workflows or performance are already verified when they have not run.
+Do not change physics, timers, audio speed, simulation rate, skip frames or
+discard visual correctness to reach a number. 60 FPS presentation/interpolation
+is a later enhancement, not an MVP requirement.
 
-## If blocked
-Read SOURCES.md and inspect only source relevant to the observed error. Document a concrete blocker and next experiment in KNOWN_BLOCKERS.md. Use rr-pc-port only after comparing behavior coverage and portability; do not silently replace original gameplay with approximations.
+If speed is insufficient:
+- Obtain a short on-device profile separating translated game code, GTE,
+  rasterizer, audio and presentation.
+- Apply small, measured fixes if readily available, then remeasure.
+- If a new GPU polygon renderer or deep architecture work is required, record
+  the measured bottleneck and a concrete follow-up recommendation. Finish the
+  usable prototype handoff instead of expanding this task into a renderer rewrite.
+- Never conclude the device is too weak from a Debug build or unmeasured guess.
 
-## Keep status replies tiny
-Build: PASS/FAIL/NOT RUN — one line
-Deploy: PASS/FAIL/NOT RUN — one line
-Device: PASS/FAIL/NOT RUN — one line
+## Scope limits
+- No Vulkan, WestonPack, replacement graphics drivers, firmware changes,
+  overclocking, broad refactoring or speculative compatibility layers.
+- Do not bundle/replace SDL2, libc, libstdc++ or firmware graphics libraries.
+- No 60 FPS project, widescreen, HD textures, release marketing or PortMaster PR.
+- Respect upstream license notices. Do not publish game data or generated game
+  code. Keep PSX.EXE, disc images, extracted assets, generated game.c/disassembly,
+  private logs and builds containing embedded game content out of public git/CI.
+- A full build needs private game-derived inputs; an asset-free CI pass is not
+  evidence that gameplay works.
+- Scripts named here are requirements to implement, not files already supplied.
+- Author commits as the repository owner using the configured GitHub noreply
+  identity, with no AI-author or AI coauthor attribution.
+- Record actual failures and fixes in KNOWN_BLOCKERS.md; mark assumptions clearly.
+
+## Concise status
+Build: PASS/FAIL/NOT RUN — exact result
+Deploy: PASS/FAIL/NOT RUN — exact result
+Device: PASS/FAIL/NOT RUN — furthest verified screen/race
+Performance: measured race FPS and timing, or NOT TESTED
 Changed: files/commit
-Next: single next action
+Next: one concrete action
 
+Keep working until the playable MVP is delivered or a concrete external blocker
+prevents further progress. Do not claim success from build output alone.
